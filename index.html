@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reader</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">r</span>
+          <div>
+            <h1>Reader</h1>
+            <p>沉浸式影子跟读工作台</p>
+          </div>
+        </div>
+        <div class="top-actions" role="group" aria-label="阅读设置">
+          <label class="select-wrap">
+            <span>语言</span>
+            <select id="languageSelect">
+              <option value="es-MX">Español · México</option>
+              <option value="en-US">English · US</option>
+            </select>
+          </label>
+          <button class="icon-button" id="speakButton" title="朗读当前选区" aria-label="朗读当前选区">
+            <span>▶</span>
+          </button>
+          <button class="icon-button" id="exportAudioButton" title="导出当前语音" aria-label="导出当前语音">
+            <span>↓</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="阅读工作区">
+        <section class="editor-pane" aria-label="文本输入区">
+          <div class="pane-header">
+            <div>
+              <strong>Source</strong>
+              <span>Text / Markdown</span>
+            </div>
+            <div class="segmented" role="tablist" aria-label="编辑和预览切换">
+              <button id="editTab" class="active" type="button">Edit</button>
+              <button id="previewTab" type="button">Preview</button>
+            </div>
+          </div>
+          <textarea id="sourceInput" spellcheck="false"></textarea>
+          <article id="preview" class="preview hidden" tabindex="0"></article>
+        </section>
+
+        <div
+          id="resizeHandle"
+          class="resize-handle"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整右侧面板宽度"
+          tabindex="0"
+        ></div>
+
+        <aside class="inspector" aria-label="中文翻译和语法解析">
+          <div class="pane-header">
+            <div>
+              <strong>Inspector</strong>
+              <span>翻译 · 语法 · 语音</span>
+            </div>
+            <div class="status-dot" id="statusDot" title="就绪"></div>
+          </div>
+
+          <div class="inspector-scroll">
+            <section class="result-grid">
+              <div>
+                <p class="label">中文翻译</p>
+                <div id="translation" class="output-block muted">等待选择文本。</div>
+              </div>
+              <div>
+                <p class="label">AI 语法解析</p>
+                <div id="analysis" class="output-block muted">划取文本后自动解析语法。</div>
+              </div>
+            </section>
+
+            <section class="terms-panel">
+              <div class="inline-title">
+                <p class="label">重点词汇</p>
+                <button id="copySelectionButton" type="button">复制</button>
+              </div>
+              <div id="terms" class="term-list"></div>
+            </section>
+
+            <section class="voice-panel">
+              <p class="label">语音</p>
+              <div class="voice-controls">
+                <div class="voice-name" id="voiceName">Microsoft Edge TTS · es-MX-DaliaNeural</div>
+                <label>
+                  速度
+                  <input id="rateInput" type="range" min="0.65" max="1.15" step="0.05" value="0.9" />
+                </label>
+                <label>
+                  音高
+                  <input id="pitchInput" type="range" min="0.8" max="1.2" step="0.05" value="1" />
+                </label>
+              </div>
+            </section>
+
+            <section class="selection-card">
+              <p class="label">原文选区</p>
+              <div id="selectedText" class="selected-text">在左侧预览或编辑区划词、划句、划段。</div>
+            </section>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
