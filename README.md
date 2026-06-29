@@ -33,12 +33,16 @@ npm run dev
 
 ## Edge TTS
 
-语音由后端调用 Microsoft Edge TTS 生成，默认女声：
+语音在部署环境优先通过 Azure Speech REST API 生成 MP3；未设置 Azure Speech 环境变量时，本地开发会回退到 `edge-tts` 命令。默认女声：
 
 ```env
+AZURE_SPEECH_KEY=your-azure-speech-key
+AZURE_SPEECH_REGION=eastus
 EDGE_TTS_ES_MX_VOICE=es-MX-DaliaNeural
 EDGE_TTS_EN_US_VOICE=en-US-JennyNeural
 EDGE_TTS_COMMAND=edge-tts
 ```
 
 选择 `Español · México` 时使用 `es-MX-DaliaNeural`；选择 `English · US` 时自动切换为 `en-US-JennyNeural`。
+
+在 Vercel 上部署时，设置 `AZURE_SPEECH_KEY` 和 `AZURE_SPEECH_REGION` 即可保留播放与导出 MP3 功能；不要依赖 `EDGE_TTS_COMMAND`，因为 Vercel 运行时通常没有本机 `edge-tts` CLI。

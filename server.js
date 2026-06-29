@@ -31,7 +31,7 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8"
 };
 
-const server = http.createServer(async (request, response) => {
+export async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
 
   if (request.method === "POST" && url.pathname === "/api/ai") {
@@ -81,7 +81,9 @@ const server = http.createServer(async (request, response) => {
   } catch {
     sendJson(response, 404, { error: "Not found" });
   }
-});
+}
+
+const server = http.createServer(handleRequest);
 
 async function handleAi(request, response) {
   try {
@@ -143,10 +145,6 @@ async function handleReadingContext(request, response) {
 }
 
 async function handleTts(request, response) {
-  const tempBase = join(tmpdir(), `estudiar-tts-${randomUUID()}`);
-  const inputPath = `${tempBase}.txt`;
-  const outputPath = `${tempBase}.mp3`;
-
   try {
     loadEnvFile(join(root, ".env"), { overwrite: true });
 
@@ -158,36 +156,97 @@ async function handleTts(request, response) {
       return;
     }
 
+    const voice = selectEdgeVoice(payload.language);
+    const ttsResult = await synthesizeSpeech({
+      text,
+      voice,
+      language: payload.language,
+      rate: payload.rate,
+      pitch: payload.pitch
+    });
+    response.writeHead(200, {
+      "Content-Type": "audio/mpeg",
+      "Content-Length": ttsResult.audio.length,
+      "Cache-Control": "no-store",
+      "X-Voice": voice,
+      "X-TTS-Provider": ttsResult.provider
+    });
+    response.end(ttsResult.audio);
+  } catch (error) {
+    sendJson(response, 500, {
+      error: "TTS request failed",
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+async function synthesizeSpeech({ text, voice, language, rate, pitch }) {
+  if (process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
+    return {
+      provider: "azure-speech",
+      audio: await synthesizeAzureSpeech({ text, voice, language, rate, pitch })
+    };
+  }
+
+  return {
+    provider: "edge-tts-cli",
+    audio: await synthesizeEdgeCliSpeech({ text, voice, rate, pitch })
+  };
+}
+
+async function synthesizeAzureSpeech({ text, voice, language, rate, pitch }) {
+  const endpoint =
+    process.env.AZURE_SPEECH_ENDPOINT ||
+    `https://${process.env.AZURE_SPEECH_REGION}.tts.speech.microsoft.com/cognitiveservices/v1`;
+  const ssml = buildSpeechSsml({
+    text,
+    voice,
+    language,
+    rate: toEdgeRate(rate),
+    pitch: toEdgePitch(pitch)
+  });
+
+  const upstream = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/ssml+xml",
+      "Ocp-Apim-Subscription-Key": process.env.AZURE_SPEECH_KEY,
+      "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+      "User-Agent": "estudiar-reader"
+    },
+    body: ssml
+  });
+
+  if (!upstream.ok) {
+    const message = await upstream.text().catch(() => "");
+    throw new Error(message || `Azure Speech returned ${upstream.status}`);
+  }
+
+  return Buffer.from(await upstream.arrayBuffer());
+}
+
+async function synthesizeEdgeCliSpeech({ text, voice, rate, pitch }) {
+  const tempBase = join(tmpdir(), `estudiar-tts-${randomUUID()}`);
+  const inputPath = `${tempBase}.txt`;
+  const outputPath = `${tempBase}.mp3`;
+
+  try {
     await writeFile(inputPath, text, "utf8");
 
-    const voice = selectEdgeVoice(payload.language);
     const command = process.env.EDGE_TTS_COMMAND || "edge-tts";
     const args = [
       "--file",
       inputPath,
       "--voice",
       voice,
-      `--rate=${toEdgeRate(payload.rate)}`,
-      `--pitch=${toEdgePitch(payload.pitch)}`,
+      `--rate=${toEdgeRate(rate)}`,
+      `--pitch=${toEdgePitch(pitch)}`,
       "--write-media",
       outputPath
     ];
 
     await runCommand(command, args);
-
-    const audio = await readFile(outputPath);
-    response.writeHead(200, {
-      "Content-Type": "audio/mpeg",
-      "Content-Length": audio.length,
-      "Cache-Control": "no-store",
-      "X-Voice": voice
-    });
-    response.end(audio);
-  } catch (error) {
-    sendJson(response, 500, {
-      error: "TTS request failed",
-      message: error instanceof Error ? error.message : String(error)
-    });
+    return await readFile(outputPath);
   } finally {
     await Promise.allSettled([unlink(inputPath), unlink(outputPath)]);
   }
@@ -460,6 +519,32 @@ function toEdgePitch(value) {
   return `${hertz >= 0 ? "+" : ""}${hertz}Hz`;
 }
 
+function buildSpeechSsml({ text, voice, language, rate, pitch }) {
+  const locale = language || voice.split("-").slice(0, 2).join("-") || "es-MX";
+
+  return [
+    `<speak version="1.0" xml:lang="${escapeXml(locale)}" xmlns="http://www.w3.org/2001/10/synthesis">`,
+    `<voice name="${escapeXml(voice)}">`,
+    `<prosody rate="${escapeXml(rate)}" pitch="${escapeXml(pitch)}">`,
+    escapeXml(text),
+    "</prosody>",
+    "</voice>",
+    "</speak>"
+  ].join("");
+}
+
+function escapeXml(value) {
+  return String(value || "").replace(/[<>&'"]/g, (char) => {
+    return {
+      "<": "&lt;",
+      ">": "&gt;",
+      "&": "&amp;",
+      "'": "&apos;",
+      '"': "&quot;"
+    }[char];
+  });
+}
+
 function buildGrammarInstruction(language) {
   const targetLanguage =
     language === "es-MX"
@@ -604,6 +689,8 @@ function unquoteEnvValue(value) {
   return value;
 }
 
-server.listen(port, () => {
-  console.log(`Immersive reader running at http://127.0.0.1:${port}`);
-});
+if (!process.env.VERCEL) {
+  server.listen(port, () => {
+    console.log(`Immersive reader running at http://127.0.0.1:${port}`);
+  });
+}
