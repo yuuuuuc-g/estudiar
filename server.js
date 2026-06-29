@@ -51,10 +51,13 @@ export async function handleRequest(request, response) {
 
   if (request.method === "GET" && url.pathname === "/api/status") {
     loadEnvFile(join(root, ".env"), { overwrite: true });
+    const ttsProvider = getTtsProvider();
     sendJson(response, 200, {
       deepseekConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
       model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
-      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
+      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      ttsAvailable: ttsProvider !== "none",
+      ttsProvider
     });
     return;
   }
@@ -188,10 +191,26 @@ async function synthesizeSpeech({ text, voice, language, rate, pitch }) {
     };
   }
 
+  if (process.env.VERCEL) {
+    throw new Error("Azure Speech is not configured. Set AZURE_SPEECH_KEY and AZURE_SPEECH_REGION in Vercel to enable MP3 TTS.");
+  }
+
   return {
     provider: "edge-tts-cli",
     audio: await synthesizeEdgeCliSpeech({ text, voice, rate, pitch })
   };
+}
+
+function getTtsProvider() {
+  if (process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
+    return "azure-speech";
+  }
+
+  if (process.env.VERCEL) {
+    return "none";
+  }
+
+  return "edge-tts-cli";
 }
 
 async function synthesizeAzureSpeech({ text, voice, language, rate, pitch }) {

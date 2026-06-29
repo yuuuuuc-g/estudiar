@@ -45,4 +45,4 @@ EDGE_TTS_COMMAND=edge-tts
 
 选择 `Español · México` 时使用 `es-MX-DaliaNeural`；选择 `English · US` 时自动切换为 `en-US-JennyNeural`。
 
-在 Vercel 上部署时，设置 `AZURE_SPEECH_KEY` 和 `AZURE_SPEECH_REGION` 即可保留播放与导出 MP3 功能；不要依赖 `EDGE_TTS_COMMAND`，因为 Vercel 运行时通常没有本机 `edge-tts` CLI。
+在 Vercel 上部署时，设置 `AZURE_SPEECH_KEY` 和 `AZURE_SPEECH_REGION` 即可保留后端 MP3 播放与导出功能；不要依赖 `EDGE_TTS_COMMAND`，因为 Vercel 运行时通常没有本机 `edge-tts` CLI。未配置 Azure Speech 时，线上播放会自动回退到浏览器内置朗读，但不能导出 MP3。

@@ -74,6 +74,9 @@ let previewPointerStart = null;
 let audioPlayer = new Audio();
 let audioUrl = "";
 let isAudioReady = false;
+let backendTtsAvailable = true;
+let browserUtterance = null;
+let isBrowserSpeechActive = false;
 let syncedReadingContextKey = "";
 const inspectorWidthStorageKey = "estudiar.inspectorWidth";
 const previewSelectionSuppressMs = 700;
@@ -83,6 +86,7 @@ elements.sourceInput.value = sampleText;
 renderPreview();
 updateVoiceName();
 setupInspectorResize();
+loadAppStatus();
 
 elements.sourceInput.addEventListener("input", () => {
   renderPreview();
@@ -115,9 +119,26 @@ function handleLanguageChange() {
   updateVoiceName();
 }
 
-function updateVoiceName() {
-  elements.voiceName.textContent =
-    voiceLabels[elements.languageSelect.value] || "Microsoft Edge TTS";
+async function loadAppStatus() {
+  try {
+    const response = await fetch("/api/status");
+    if (!response.ok) return;
+    const payload = await response.json();
+    backendTtsAvailable = payload.ttsAvailable !== false;
+    updateVoiceName(payload.ttsProvider);
+  } catch {
+    backendTtsAvailable = true;
+  }
+}
+
+function updateVoiceName(ttsProvider) {
+  const voiceLabel = voiceLabels[elements.languageSelect.value] || "Microsoft Edge TTS";
+  if (ttsProvider === "none" || !backendTtsAvailable) {
+    elements.voiceName.textContent = `${voiceLabel} · 浏览器朗读`;
+    return;
+  }
+
+  elements.voiceName.textContent = voiceLabel;
 }
 
 function setupInspectorResize() {
@@ -552,6 +573,12 @@ function renderTerms(terms) {
 }
 
 async function toggleSpeech() {
+  if (isBrowserSpeechActive) {
+    stopBrowserSpeech();
+    setSpeakButton("play");
+    return;
+  }
+
   if (!audioPlayer.paused) {
     audioPlayer.pause();
     setSpeakButton("play");
@@ -566,17 +593,31 @@ async function toggleSpeech() {
   const text = getActiveSpeechText();
   if (!text.trim()) return;
 
+  if (!backendTtsAvailable) {
+    if (!playBrowserSpeech(text)) {
+      handleSpeechError(new Error("当前浏览器不支持内置朗读。配置 Azure Speech 后可启用服务器语音。"));
+    }
+    return;
+  }
+
   try {
     await prepareSpeechAudio(text);
     await audioPlayer.play();
   } catch (error) {
-    handleSpeechError(error);
+    if (!playBrowserSpeech(text)) {
+      handleSpeechError(error);
+    }
   }
 }
 
 async function exportSpeech() {
   const text = getActiveSpeechText();
   if (!text.trim()) return;
+
+  if (!backendTtsAvailable) {
+    handleSpeechError(new Error("当前部署未配置 Azure Speech，无法导出 MP3；播放会使用浏览器内置朗读。"));
+    return;
+  }
 
   try {
     await prepareSpeechAudio(text);
@@ -624,6 +665,8 @@ function getActiveSpeechText() {
 }
 
 async function prepareSpeechAudio(text) {
+  stopBrowserSpeech();
+
   if (audioUrl) {
     isAudioReady = true;
     return;
@@ -678,10 +721,11 @@ function handleSpeechError(error) {
   isAudioReady = false;
   setSpeakButton("play");
   setExportButton("ready");
-  elements.analysis.textContent += `\n\nEdge TTS 生成失败：${error instanceof Error ? error.message : String(error)}`;
+  elements.analysis.textContent += `\n\n语音生成失败：${error instanceof Error ? error.message : String(error)}`;
 }
 
 function resetAudio() {
+  stopBrowserSpeech();
   audioPlayer.pause();
   audioPlayer.removeAttribute("src");
   audioPlayer.load();
@@ -690,6 +734,50 @@ function resetAudio() {
   isAudioReady = false;
   setSpeakButton("play");
   setExportButton("ready");
+}
+
+function playBrowserSpeech(text) {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+    return false;
+  }
+
+  stopBrowserSpeech();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = elements.languageSelect.value;
+  utterance.rate = Number(elements.rateInput.value) || 1;
+  utterance.pitch = Number(elements.pitchInput.value) || 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const matchingVoice = voices.find((voice) => voice.lang === utterance.lang);
+  if (matchingVoice) utterance.voice = matchingVoice;
+
+  utterance.addEventListener("start", () => {
+    isBrowserSpeechActive = true;
+    setSpeakButton("pause");
+  });
+  utterance.addEventListener("end", () => {
+    isBrowserSpeechActive = false;
+    browserUtterance = null;
+    setSpeakButton("play");
+  });
+  utterance.addEventListener("error", () => {
+    isBrowserSpeechActive = false;
+    browserUtterance = null;
+    setSpeakButton("play");
+  });
+
+  browserUtterance = utterance;
+  window.speechSynthesis.speak(utterance);
+  return true;
+}
+
+function stopBrowserSpeech() {
+  if (!("speechSynthesis" in window)) return;
+  if (isBrowserSpeechActive || window.speechSynthesis.speaking) {
+    window.speechSynthesis.cancel();
+  }
+  isBrowserSpeechActive = false;
+  browserUtterance = null;
 }
 
 function setSpeakButton(state) {
