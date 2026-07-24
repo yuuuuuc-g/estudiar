@@ -10,14 +10,14 @@ npm run dev
 
 打开 `http://127.0.0.1:3000`。
 
-## DeepSeek V4 Pro
+## Gemini 3.6 Flash
 
-默认模型为 `deepseek-v4-pro`，接口使用 DeepSeek 的 OpenAI-compatible Chat API。先在 `.env` 中填入：
+默认模型为 `gemini-3.6-flash`，接口使用 Gemini 原生 `generateContent` REST API。先在 `.env` 中填入：
 
 ```env
-DEEPSEEK_API_KEY=sk-your-deepseek-api-key
-DEEPSEEK_MODEL=deepseek-v4-pro
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 PORT=3000
 ```
 
@@ -29,7 +29,7 @@ npm run dev
 
 语法解析提示词会把全文 `fullText` 一并传给模型，但只允许用于消除指代或省略造成的语法歧义；模型会聚焦选区的句子成分、结构层级、从句、短语修饰、时态语态和易错点，不再分析选区在全文中的论证作用。西班牙语模式固定为 `es-MX`，提示词会要求关注墨西哥西语中的词序、性数一致、动词变位和介词搭配。
 
-未设置 `DEEPSEEK_API_KEY` 时会使用本地语法线索兜底，便于离线调试界面。
+未设置 `GEMINI_API_KEY` 时会使用本地语法线索兜底，便于离线调试界面。
 
 ## Edge TTS
 

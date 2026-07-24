@@ -53,9 +53,9 @@ export async function handleRequest(request, response) {
     loadEnvFile(join(root, ".env"), { overwrite: true });
     const ttsProvider = getTtsProvider();
     sendJson(response, 200, {
-      deepseekConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
-      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-pro",
-      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+      baseUrl: process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta",
       ttsAvailable: ttsProvider !== "none",
       ttsProvider
     });
@@ -279,19 +279,19 @@ async function completeAi(payload, options = {}) {
     return { ...analysisCache.get(cacheKey), cached: true };
   }
 
-  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY;
   const apiUrl = process.env.AI_API_URL;
   const apiKey = process.env.AI_API_KEY;
   let result;
 
-  if (deepseekKey) {
-    result = await callDeepSeek(payload, deepseekKey);
+  if (geminiKey) {
+    result = await callGemini(payload, geminiKey);
   } else if (apiUrl && apiKey) {
     result = await callCustomAi(payload, apiUrl, apiKey);
   } else {
     result = {
       source: "local",
-      reason: "missing_deepseek_api_key",
+      reason: "missing_gemini_api_key",
       result: localAnalyze(payload)
     };
   }
@@ -433,36 +433,41 @@ function setAnalysisCache(key, value) {
   }
 }
 
-async function callDeepSeek(payload, apiKey) {
-  const baseUrl = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com";
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
+async function callGemini(payload, apiKey) {
+  const baseUrl =
+    process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta";
+  const model = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 
   try {
-    const upstream = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    const endpoint = `${baseUrl.replace(/\/$/, "")}/models/${encodeURIComponent(model)}:generateContent`;
+    const upstream = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
+        "x-goog-api-key": apiKey
       },
       body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: buildGrammarInstruction(payload.language)
-          },
+        system_instruction: {
+          parts: [{ text: buildGrammarInstruction(payload.language) }]
+        },
+        contents: [
           {
             role: "user",
-            content: JSON.stringify({
-              task: payload.task,
-              selectedText: payload.text,
-              fullText: payload.fullText
-            })
+            parts: [
+              {
+                text: JSON.stringify({
+                  task: payload.task,
+                  selectedText: payload.text,
+                  fullText: payload.fullText
+                })
+              }
+            ]
           }
         ],
-        thinking: { type: "enabled" },
-        reasoning_effort: "high",
-        stream: false
+        generationConfig: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "high" }
+        }
       })
     });
 
@@ -471,21 +476,26 @@ async function callDeepSeek(payload, apiKey) {
 
     if (!upstream.ok) {
       return {
-        source: "deepseek",
+        source: "gemini",
         model,
-        error: json.error?.message || "DeepSeek request failed",
+        error: json.error?.message || "Gemini request failed",
         result: localAnalyze(payload)
       };
     }
 
+    const content = json.candidates?.[0]?.content?.parts
+      ?.filter((part) => !part.thought && typeof part.text === "string")
+      .map((part) => part.text)
+      .join("");
+
     return {
-      source: "deepseek",
+      source: "gemini",
       model,
-      result: parseModelContent(json.choices?.[0]?.message?.content)
+      result: parseModelContent(content)
     };
   } catch (error) {
     return {
-      source: "deepseek",
+      source: "gemini",
       model,
       error: error instanceof Error ? error.message : String(error),
       result: localAnalyze(payload)

@@ -473,10 +473,10 @@ function formatAnalysisResult(result, payload = {}) {
   }
 
   const modelNote =
-    payload.source === "deepseek"
-      ? `模型：${payload.model || "deepseek-v4-pro"}${payload.cached ? " · 已缓存" : ""}`
-      : "未读取到 DEEPSEEK_API_KEY，当前为本地模式。请确认 .env 已保存；服务会在下一次请求前重新读取 .env。";
-  const errorNote = payload.error ? `DeepSeek 调用失败：${payload.error}` : "";
+    payload.source === "gemini"
+      ? `模型：${payload.model || "gemini-3.6-flash"}${payload.cached ? " · 已缓存" : ""}`
+      : "未读取到 GEMINI_API_KEY，当前为本地模式。请确认 .env 已保存；服务会在下一次请求前重新读取 .env。";
+  const errorNote = payload.error ? `Gemini 调用失败：${payload.error}` : "";
 
   sections.push([modelNote, errorNote].filter(Boolean).join("\n"));
   return sections.filter(Boolean).join("\n\n");
